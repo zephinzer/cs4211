@@ -1,0 +1,69 @@
+﻿
+//CSP slides examples
+
+//Example 1: VMC with Choc Lover
+
+//Assuming Same Alphabet (commenting out the following two lines to remove this assumption):
+#alphabet VMC {coin, choc, bisc};
+#alphabet CHOCLOV {coin, choc, bisc};
+
+VMC = coin -> (choc -> VMC [] bisc -> VMC);
+CHOCLOV = choc -> CHOCLOV [] coin -> choc -> CHOCLOV;
+
+System1 = VMC || CHOCLOV;
+#assert System1 deadlockfree;
+
+//Example 2: VMH with (Rude) Customer
+
+VMH = on -> coin -> choc -> off -> VMH;
+CUST = on -> (coin -> bisc -> CUST [] curse -> coin -> choc -> CUST);
+
+System2 = VMH || CUST;
+#assert System2 deadlockfree;
+
+//Example 3: Slow Walk with Slow Climb (= Slow Trek)
+
+SLOWALK  = left -> rest -> SLOWALK [] right -> rest -> SLOWALK;
+SLOCLIMB = up -> rest -> SLOCLIMB [] down -> SLOCLIMB; 
+
+SLOTREK = SLOWALK || SLOCLIMB;
+#assert SLOTREK deadlockfree;
+
+
+//Example 4: VMC with Greedy Person
+
+// GREEDY and VMC have the same alphabet
+// #alphabet GREEDY {coin, choc, bisc};
+
+GREEDY = choc -> GREEDY [] bisc -> GREEDY;
+
+System4 = VMC || GREEDY;
+#assert System4 deadlockfree;
+
+//Example 5: VM with Bisc Lover
+//Assuming Same Alphabet (later: commenting out the following two lines to remove this assumption):
+#alphabet VM {coin, choc, bisc};
+#alphabet BISCLOV {coin, choc, bisc};
+
+VM = coin -> choc -> VM;
+BISCLOV = coin -> bisc -> BISCLOV;
+
+System5 = VM || BISCLOV;
+#assert System5 deadlockfree;
+
+//Example 6: Singapore culture: Good aspects of the "Nany State"
+
+//Two brothers love to share resources to play either Chess or Tennis
+LHL = getboard->playchess->LHL [] getracket->playtennis->LHL;
+LHY = getpieces->playchess->LHY [] getball->playtennis->LHY;
+
+//Any problem if they are playing together? Any deadlock example?
+Play = LHY || LHL;
+#assert Play deadlockfree;
+
+//Now if Dad gives guidelines, can two brothers always play together? 
+LKY = getboard ->getpieces ->LKY [] getracket ->getball ->LKY;
+
+playtogether = LHY || LHL || LKY;
+#assert playtogether deadlockfree;
+

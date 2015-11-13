@@ -1,0 +1,84 @@
+#define NO_OF_MODULES 1;
+#define NO_OF_STUDENTS 3;
+#define NO_OF_MODULES_PER_STUDENT 2;
+
+
+channel at_login 0;
+channel at_logout 0;
+channel max_mod_check 0;
+channel mod_cap_check 0;
+channel mod_clash_check 0;
+
+var count_students = 0;
+var student_module_count[NO_OF_STUDENTS];
+
+// Object Processes
+// Students are modelled to actions student can take
+Student(i) = 				Student_Login(i);
+Student_Login2(i) =			at_login -> (
+								max_mod_check -> (
+									register_module -> 
+										mod_cap_check -> (
+											mod_clash_check -> (
+												Student_Logout(i)
+												[] Student_Login2(i)
+											)
+											[] Student_Login2(i)
+										)
+										[] Student_Login2(i)
+								)
+								[] Student_Logout(i)
+							);
+Student_Login(i) = 			at_login!i -> max_mod_check!i -> (
+								login_success -> Student_Dashboard(i)
+								[] login_failure -> Student_Login(i)
+							);
+Student_Logout(i) =			at_logout!i -> Student(i);
+
+Student_Dashboard(i) =		at_dashboard -> Student_RegisterModule(i) [] Student_DropModule(i) [] Student_Logout(i);
+
+Student_DropModule(i) =		[student_module_count[i] > 0] drop_module {student_module_count[i]--} -> Student_Dashboard(i); 
+
+Student_RegisterModule(i) = mod_cap_check!i -> mod_clash_check!i -> (
+								mod_check_success {student_module_count[i]++} -> Student_Dashboard(i)
+								[] mod_check_failure -> Student_Dashboard(i)
+							);
+
+// Event Processes
+Login() =			at_login?i -> (
+						login_successful {count_students++} -> Login()
+						[] login_unsuccessful -> Login()
+					);
+
+Logout() =			at_logout?i -> logout {count_students--} -> Logout();
+
+MaxModCheck() = 	max_mod_check?i -> (
+						max_mod_not_reached -> MaxModCheck()
+						[] max_mod_reached -> MaxModCheck()
+					);
+
+ModValidCheck() = 	[student_module_count[i] < NO_MODULES_PER_STUDENT] mod_cap_check?i -> 
+						mod_clash_check?i -> 
+						register {student_module_count.i++} -> 
+						ModValidCheck();
+
+ModCapCheck() = 	mod_cap_check?i -> (
+						mod_check_success -> ModCapCheck()
+						[] mod_check_failure -> ModCapCheck()
+					);
+
+ModClashCheck() = 	mod_clash_check?i -> (
+						mod_check_success -> ModClashCheck()
+						[] mod_check_failure -> ModClashCheck()
+					);
+
+SpawnStudents() = |||i:{0..NO_OF_STUDENTS-1}@Student(i);
+// TTSystem synchronizes Event and Object Processes
+TTSystem() = SpawnStudents() || Login() || Logout() || MaxModCheck() || ModValidCheck(); //|| ModuleCapacityCheck();
+
+#define goalSomebodyCanLogin (count_students > 0);
+#define goalEverybodyCanLogin (count_students == NO_OF_STUDENTS);
+#define goalModuleRegistered (module_was_registered >= 1);
+#assert TTSystem reaches goalSomebodyCanLogin;
+#assert TTSystem reaches goalEverybodyCanLogin;
+#assert TTSystem() deadlockfree;

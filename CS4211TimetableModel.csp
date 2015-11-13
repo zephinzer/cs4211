@@ -1,0 +1,54 @@
+﻿#define NO_OF_MODULES 1;
+#define NO_OF_STUDENTS 1;
+#define NO_OF_MODULES_PER_STUDENT 2;
+
+channel login 0;
+channel check_max_mod 0;
+channel check_max_cap 0;
+channel check_ttclash 0;
+
+var student_status[NO_OF_STUDENTS];
+
+StudentModRegister() =	check_max_cap?i -> (
+							module_has_space -> check_ttclash?i -> (
+								student_timetable_free -> StudentModRegister()
+								[] student_timetable_clash -> StudentModRegister()
+							)
+							[] module_maxed_out -> StudentModRegister()
+						);
+Student(i) = 			login!i -> 
+						(
+							login_success -> 
+								check_max_mod!i -> 
+								registration_page -> 
+								module_selected ->
+								check_max_cap!i ->
+								check_ttclash!i -> (
+									module_has_space -> (
+										student_timetable_free ->
+											module_registration_success -> 
+											registration_page
+										[] student_timetable_clash ->
+											module_registration_failure ->
+											registration_page
+									)
+									[] module_maxed_out -> 
+										module_registration_failure ->
+										registration_page
+								)
+							[] login_failure -> Student(i)
+						);
+MaxModuleCheck() =		check_max_mod?i -> (
+							less_than_five_mods -> MaxModuleCheck()
+							[] system_exit -> MaxModuleCheck()
+						);
+Login() = 				login?i -> (
+							login_success -> Login()
+							[] login_failure -> Login()
+						);
+
+SpawnStudent() = |||i:{0..NO_OF_STUDENTS}@Student(i);
+TTSystem() = SpawnStudent() || Login() || MaxModuleCheck();
+
+#assert TTSystem() deadlockfree;
+#assert TTSystem() reaches module_registration_success;
