@@ -1,32 +1,54 @@
-#define NO_OF_MODULES 1;
-#define NO_OF_STUDENTS 1;
-#define NO_OF_MODULES_PER_STUDENT 2;
+#define MAX_NO_OF_MODULES 1;
+#define MAX_NO_OF_STUDENTS 2;
+#define MAX_NO_OF_MODULES_PER_STUDENT 2;
 #define MODULES_MAX_CAPACITY 10;
 
 
-var modules_per_students[NO_OF_STUDENTS];
-var students_registered_per_module[NO_OF_MODULES];
-var student_state[NO_OF_STUDENTS] = [0(NO_OF_STUDENTS)];
-var module_timing[NO_OF_MODULES];
-var student_timetable[NO_OF_STUDENTS][NO_OF_MODULES];
+var modules_per_student[MAX_NO_OF_STUDENTS] = [0(MAX_NO_OF_STUDENTS)];
+var students_registered_per_module[MAX_NO_OF_MODULES] = [9(MAX_NO_OF_MODULES)];
+var student_state[MAX_NO_OF_STUDENTS] = [0(MAX_NO_OF_STUDENTS)];
+var student_timetable[MAX_NO_OF_STUDENTS][MAX_NO_OF_MODULES] = [0(MAX_NO_OF_STUDENTS*MAX_NO_OF_MODULES)];
 var security_breach = false;
 
-SpawnStudents() = |||student_id:{0..NO_OF_STUDENTS - 1}@Student(student_id);
+SpawnStudents() = |||student_id:{0..MAX_NO_OF_STUDENTS - 1}@Student(student_id);
 
 Student(student_id) = Login(student_id);
 
-Login(student_id) = login {student_state[student_id] = 1} -> Dashboard(student_id);
+Login(student_id) = login {student_state[student_id] = 1} -> MaxModulesTaken(student_id);
 
-Dashboard(student_id) = []module_id:{0..NO_OF_MODULES - 1}@ModuleRegistration(student_id, module_id);
+MaxModulesTaken(student_id) = if (modules_per_student[student_id] < MAX_NO_OF_MODULES_PER_STUDENT) {
+								Dashboard(student_id)
+							  } else {
+							  	maxModulesTaken {student_state[student_id] = 2} -> Logout(student_id)
+							  };
+
+Dashboard(student_id) = []module_id:{0..MAX_NO_OF_MODULES - 1}@ModuleRegistration(student_id, module_id);
 
 ModuleRegistration(student_id, module_id) = if (student_state[student_id] == 0) {
 												security {security_breach = true} -> Logout(student_id)
 											}
 											else if (students_registered_per_module[module_id] == MODULES_MAX_CAPACITY) {
-												Logout(student_id)
+												moduleFull {student_state[student_id] = 3} -> ModuleRegistrationFailure(student_id)
 											}
-											else if (students_registered_per_module[module_id] == MODULES_MAX_CAPACITY) {
-												Logout(student_id)
+											else if (student_timetable[student_id][module_id] == 1) {
+												moduleClash {student_state[student_id] = 4} -> ModuleRegistrationFailure(student_id)
+											} else {
+												ModuleRegistrationSuccess(student_id, module_id)
 											};
 											
+ModuleRegistrationFailure(student_id) = resetState {student_state[student_id] = 1} -> Dashboard(student_id);
+
+ModuleRegistrationSuccess(student_id, module_id) = success {
+												   	 student_state[student_id] = 5;
+												   	 students_registered_per_module[module_id]++;
+												   	 modules_per_student[student_id]++;
+												   	 student_timetable[student_id][module_id] = 1;
+												   } -> MaxModulesTaken(student_id);
+												   
 Logout(student_id) = logout {student_state[student_id] = 0} -> Student(student_id);
+
+System() = SpawnStudents();
+
+#define goal_secure (security_breach == false);
+#assert System reaches goal_secure;
+#assert System() deadlockfree;
