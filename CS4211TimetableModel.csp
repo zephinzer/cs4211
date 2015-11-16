@@ -22,7 +22,30 @@ MaxModulesTaken(student_id) = if (modules_per_student[student_id] < MAX_NO_OF_MO
 							  	maxModulesTaken {student_state[student_id] = 2} -> Logout(student_id)
 							  };
 
-Dashboard(student_id) = []module_id:{0..MAX_NO_OF_MODULES - 1}@ModuleRegistration(student_id, module_id);
+Dashboard(student_id) = AddModule(student_id) [] DropModule(student_id);
+
+AddModule(student_id) = []module_id:{0..MAX_NO_OF_MODULES - 1}@ModuleRegistration(student_id, module_id);
+
+DropModule(student_id) = []module_id:{0..MAX_NO_OF_MODULES - 1}@ModuleDrop(student_id, module_id);
+
+ModuleDrop(student_id, module_id) = if (modules_per_student[student_id] > 0) {
+										if (student_timetable[student_id][module_id] == 1) {
+											moduleDropped {student_state[student_id] = 8} -> ModuleDroppedSuccess(student_id, module_id)
+										} else {
+											moduleDroppedFail {student_state[student_id] = 7} -> ModuleDroppedFailure(student_id)
+										}
+						 			} else {
+						 				moduleDroppedFail {student_state[student_id] = 6} -> ModuleDroppedFailure(student_id)
+						 			};
+
+ModuleDroppedSuccess(student_id, module_id) = ModuleDropSuccess {
+												   	 student_state[student_id] = 1;
+												   	 students_registered_per_module[module_id]--;
+												   	 modules_per_student[student_id]--;
+												   	 student_timetable[student_id][module_id] = 0;
+												   } -> Dashboard(student_id);
+
+ModuleDroppedFailure(student_id) = resetState {student_state[student_id] = 1} -> Dashboard(student_id);
 
 ModuleRegistration(student_id, module_id) = if (student_state[student_id] == 0) {
 												security {security_breach = true} -> Logout(student_id)
@@ -50,5 +73,10 @@ Logout(student_id) = logout {student_state[student_id] = 0} -> Student(student_i
 System() = SpawnStudents();
 
 #define goal_secure (security_breach == false);
+
 #assert System reaches goal_secure;
 #assert System() deadlockfree;
+#assert System() divergencefree;
+
+#define goal_max_modules (modules_per_student[0] > 0);
+#assert System reaches goal_max_modules;
