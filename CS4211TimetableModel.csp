@@ -9,25 +9,32 @@ var students_registered_per_module[MAX_NO_OF_MODULES] = [9(MAX_NO_OF_MODULES)];
 var student_state[MAX_NO_OF_STUDENTS] = [0(MAX_NO_OF_STUDENTS)];
 var student_timetable[MAX_NO_OF_STUDENTS][MAX_NO_OF_MODULES] = [0(MAX_NO_OF_STUDENTS*MAX_NO_OF_MODULES)];
 var security_breach = false;
+var minimum_modules = true;
+var j = 0;
 
+/// Instantiate all students and activate them
 SpawnStudents() = |||student_id:{0..MAX_NO_OF_STUDENTS - 1}@Student(student_id);
 
+/// When a student appears, attempt to login
 Student(student_id) = Login(student_id);
 
+/// After login, we change their state to reflect being logged in
 Login(student_id) = login {student_state[student_id] = 1} -> MaxModulesTaken(student_id);
 
+/// If the student has not reached maximum allowable quota, we send them to the dashboard
+/// Otherwise we send the student to log out
 MaxModulesTaken(student_id) = if (modules_per_student[student_id] < MAX_NO_OF_MODULES_PER_STUDENT) {
 								Dashboard(student_id)
 							  } else {
 							  	maxModulesTaken {student_state[student_id] = 2} -> Logout(student_id)
 							  };
-
+/// From the dashboard, the student can only add a module or drop a module
 Dashboard(student_id) = AddModule(student_id) [] DropModule(student_id);
-
+/// Out of all the available modules, select one and proceed with module registration
 AddModule(student_id) = []module_id:{0..MAX_NO_OF_MODULES - 1}@ModuleRegistration(student_id, module_id);
-
+/// Of all the modules, select one and drop it
 DropModule(student_id) = []module_id:{0..MAX_NO_OF_MODULES - 1}@ModuleDrop(student_id, module_id);
-
+/// Check if the student has any modules at all and whether he has the module he is trying to drop
 ModuleDrop(student_id, module_id) = if (modules_per_student[student_id] > 0) {
 										if (student_timetable[student_id][module_id] == 1) {
 											moduleDropped {student_state[student_id] = 8} -> ModuleDroppedSuccess(student_id, module_id)
@@ -37,16 +44,19 @@ ModuleDrop(student_id, module_id) = if (modules_per_student[student_id] > 0) {
 						 			} else {
 						 				moduleDroppedFail {student_state[student_id] = 6} -> ModuleDroppedFailure(student_id)
 						 			};
-
+/// Module successfully dropped, we 
+///   1) Remove it from the student's timetable
+///   2) Decrement the number of students registered in the module
 ModuleDroppedSuccess(student_id, module_id) = ModuleDropSuccess {
 												   	 student_state[student_id] = 1;
 												   	 students_registered_per_module[module_id]--;
 												   	 modules_per_student[student_id]--;
 												   	 student_timetable[student_id][module_id] = 0;
 												   } -> Dashboard(student_id);
-
+/// Module could not be dropped. We send the student back to the dashboard.
 ModuleDroppedFailure(student_id) = resetState {student_state[student_id] = 1} -> Dashboard(student_id);
-
+/// Check if the module is available and whether the student has already taken it
+/// If it is not available or the student has already taken it, we do not proceed.
 ModuleRegistration(student_id, module_id) = if (student_state[student_id] == 0) {
 												security {security_breach = true} -> Logout(student_id)
 											}
@@ -58,25 +68,39 @@ ModuleRegistration(student_id, module_id) = if (student_state[student_id] == 0) 
 											} else {
 												ModuleRegistrationSuccess(student_id, module_id)
 											};
-											
+/// Registration of module failed, we send the student back to the dashboard
 ModuleRegistrationFailure(student_id) = resetState {student_state[student_id] = 1} -> Dashboard(student_id);
-
+/// Registration of module was successful, we
+///   1) Increment the number of students registered for the module
+///   2) Insert the module into the student's timetable
 ModuleRegistrationSuccess(student_id, module_id) = success {
 												   	 student_state[student_id] = 5;
 												   	 students_registered_per_module[module_id]++;
 												   	 modules_per_student[student_id]++;
 												   	 student_timetable[student_id][module_id] = 1;
 												   } -> MaxModulesTaken(student_id);
-												   
+/// Log the student out and reset the student's state												   
 Logout(student_id) = logout {student_state[student_id] = 0} -> Student(student_id);
-
+/// Start the system
 System() = SpawnStudents();
 
-#define goal_secure (security_breach == false);
+/// Check whether all students have registered at least one module
+StudentsAtLeastOneModule() = System() [] verifier_goal {
+	while(j < MAX_NO_OF_STUDENTS) {
+		if(modules_per_student[j] == 0) {
+			minimum_modules = false
+		}
+	}
+} -> StudentsAtLeastOneModule();
 
-#assert System reaches goal_secure;
+
+#define goal_secure (security_breach == false);
+#define goal_login (student_state[0] == 1);
+#assert System() reaches goal_secure;
+#assert System() reaches goal_login;
+
 #assert System() deadlockfree;
 #assert System() divergencefree;
 
-#define goal_max_modules (modules_per_student[0] > 0);
-#assert System reaches goal_max_modules;
+#define goal_max_modules (minimum_modules == true);
+#assert StudentsAtLeastOneModule() reaches goal_max_modules;
