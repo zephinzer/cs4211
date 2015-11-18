@@ -3,6 +3,7 @@
 #define MAX_NO_OF_MODULES_PER_STUDENT 2;
 #define MODULES_MAX_CAPACITY 10;
 
+channel logoutverify 0;
 
 var modules_per_student[MAX_NO_OF_STUDENTS] = [0(MAX_NO_OF_STUDENTS)];
 var students_registered_per_module[MAX_NO_OF_MODULES] = [9(MAX_NO_OF_MODULES)];
@@ -35,7 +36,10 @@ AddModule(student_id) = []module_id:{0..MAX_NO_OF_MODULES - 1}@ModuleRegistratio
 /// Of all the modules, select one and drop it
 DropModule(student_id) = []module_id:{0..MAX_NO_OF_MODULES - 1}@ModuleDrop(student_id, module_id);
 /// Check if the student has any modules at all and whether he has the module he is trying to drop
-ModuleDrop(student_id, module_id) = if (modules_per_student[student_id] > 0) {
+ModuleDrop(student_id, module_id) = if(student_state[student_id] == 0) {
+										security_module_dropped {security_breach = true} -> Logout(student_id)
+									} 
+									else if (modules_per_student[student_id] > 0) {
 										if (student_timetable[student_id][module_id] == 1) {
 											moduleDropped {student_state[student_id] = 8} -> ModuleDroppedSuccess(student_id, module_id)
 										} else {
@@ -66,7 +70,7 @@ ModuleRegistration(student_id, module_id) = if (student_state[student_id] == 0) 
 											else if (student_timetable[student_id][module_id] == 1) {
 												moduleClash {student_state[student_id] = 4} -> ModuleRegistrationFailure(student_id)
 											} else {
-												ModuleRegistrationSuccess(student_id, module_id)
+												moduleRegistered {student_state[student_id] = 5} -> ModuleRegistrationSuccess(student_id, module_id)
 											};
 /// Registration of module failed, we send the student back to the dashboard
 ModuleRegistrationFailure(student_id) = resetState {student_state[student_id] = 1} -> Dashboard(student_id);
@@ -74,7 +78,6 @@ ModuleRegistrationFailure(student_id) = resetState {student_state[student_id] = 
 ///   1) Increment the number of students registered for the module
 ///   2) Insert the module into the student's timetable
 ModuleRegistrationSuccess(student_id, module_id) = success {
-												   	 student_state[student_id] = 5;
 												   	 students_registered_per_module[module_id]++;
 												   	 modules_per_student[student_id]++;
 												   	 student_timetable[student_id][module_id] = 1;
@@ -82,25 +85,50 @@ ModuleRegistrationSuccess(student_id, module_id) = success {
 /// Log the student out and reset the student's state												   
 Logout(student_id) = logout {student_state[student_id] = 0} -> Student(student_id);
 /// Start the system
-System() = SpawnStudents();
+System() = SpawnStudents(); StudentsAtLeastOneModule();
 
 /// Check whether all students have registered at least one module
-StudentsAtLeastOneModule() = System() [] verifier_goal {
-	while(j < MAX_NO_OF_STUDENTS) {
-		if(modules_per_student[j] == 0) {
-			minimum_modules = false
-		}
+StudentsAtLeastOneModule() = atleastonemodule {
+	minimum_modules = true;
+	if(modules_per_student[0] == 0) {
+		minimum_modules = false
 	}
 } -> StudentsAtLeastOneModule();
-
-
-#define goal_secure (security_breach == false);
-#define goal_login (student_state[0] == 1);
-#assert System() reaches goal_secure;
-#assert System() reaches goal_login;
 
 #assert System() deadlockfree;
 #assert System() divergencefree;
 
-#define goal_max_modules (minimum_modules == true);
-#assert StudentsAtLeastOneModule() reaches goal_max_modules;
+/// student can log in
+#define GOAL_STUDENT_CAN_LOGIN (student_state[0] == 1);
+#assert System() reaches GOAL_STUDENT_CAN_LOGIN;
+/// student can register a module
+#define GOAL_STUDENT_CAN_REGISTER_MODULE (student_state[0] == 5);
+#assert System() reaches GOAL_STUDENT_CAN_REGISTER_MODULE;
+/// student can register for a module IFF the module is not full
+#define GOAL_STUDENT_CAN_REGISTER_IFF_MODULE_NOT_FULL (student_state[0] == 3);
+#assert System() reaches GOAL_STUDENT_CAN_REGISTER_IFF_MODULE_NOT_FULL;
+/// student can register a module IFF they haven't registered it
+#define GOAL_STUDENT_CAN_REGISTER_IFF_NO_CLASH (student_state[0] == 4);
+#assert System() reaches GOAL_STUDENT_CAN_REGISTER_IFF_NO_CLASH;
+/// student can drop a module
+#define GOAL_STUDENT_CAN_DROP_MODULE (student_state[0] == 8);
+#assert System() reaches GOAL_STUDENT_CAN_DROP_MODULE;
+/// student can drop a module IFF they have some modules
+#define GOAL_STUDENT_CAN_DROP_MODULE_IFF_SOME_MODULES_PRESENT (student_state[0] == 6);
+#assert System() reaches GOAL_STUDENT_CAN_DROP_MODULE_IFF_SOME_MODULES_PRESENT;
+/// student cannot access system without login
+#define ANTIGOAL_STUDENT_REGISTER_WITHOUT_LOGIN (security_breach == true);
+#assert System() reaches ANTIGOAL_STUDENT_REGISTER_WITHOUT_LOGIN;
+#define ANTIGOAL_STUDENT_DROP_WITHOUT_LOGIN (security_breach == true);
+#assert System() reaches ANTIGOAL_STUDENT_DROP_WITHOUT_LOGIN;
+/// student logs out with at least one module
+#define ANTIGOAL_STUDENTS_LEAVE_WITH_NO_MODULE (minimum_modules == false);
+#assert System() reaches ANTIGOAL_STUDENTS_LEAVE_WITH_NO_MODULE;
+/// student who logs in will eventually logout
+#assert System() |= (login -> <>logout);
+/// student who logs in will register a module
+#assert System() |= (login -> moduleRegistered);
+/// student who register a module can drop it
+#assert System() |= (moduleRegistered -> <>moduleDropped);
+
+#assert System() refines System();
