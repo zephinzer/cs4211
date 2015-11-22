@@ -1,6 +1,6 @@
 #define MAX_NO_OF_MODULES 1;
 #define MAX_NO_OF_STUDENTS 2;
-#define MAX_NO_OF_MODULES_PER_STUDENT 2;
+#define MAX_NO_OF_MODULES_PER_STUDENT 5;
 #define MODULES_MAX_CAPACITY 10;
 
 channel logoutverify 0;

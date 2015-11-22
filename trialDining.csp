@@ -1,0 +1,25 @@
+#define p 1; // id of person one
+#define q 2; // id of person two
+
+channel sit 0; // channel for sitting
+channel leave 0; // see above for rest
+channel pul 0;
+channel pur 0;
+channel pdl 0;
+channel pdr 0;
+
+// primary process P
+P() = sit.p -> pur.p -> pul.p -> pdl.p -> pdr.p -> leave.p -> P();
+// primary process Q
+Q() = sit.q -> pul.q -> pur.q -> pdr.q -> pdl.q -> leave.q -> Q();
+// on event pul.X, L() initiated, pdl.X must follow
+L() = pul.p -> pdl.p -> L() [] pul.q -> pdl.q -> L();
+// on event pur.X, R() initiated, pdr.X must follow
+R() = pur.p -> pdr.p -> R() [] pur.q -> pdr.q -> R();
+
+Foot() = sit.p -> leave.p -> Foot() [] sit.q -> leave.q -> Foot();
+Table() = P() || Q() || L() || R();
+
+System() = Foot() || Table();
+
+#assert System() deadlockfree;
